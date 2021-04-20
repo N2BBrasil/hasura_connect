@@ -30,7 +30,11 @@ class PostHttpRequest implements RequestDatasource {
           request: request,
         );
       } else {
-        throw ConnectionError('Connection Rejected', request: request);
+        if(response.statusCode == 500) {
+          throw ConnectionError('Connection Rejected', request: request);
+        }
+
+        throw HasuraRequestError(response.reasonPhrase!, null, request: request);
       }
     } finally {
       client.close();
