@@ -15,7 +15,8 @@ class PostHttpRequest implements RequestDatasource {
   Future<Response> post({required Request request}) async {
     final client = clientFactory();
     try {
-      var response = await client.post(Uri.parse(request.url), body: request.query.toString(), headers: request.headers);
+      var response = await client.post(Uri.parse(request.url),
+          body: request.query.toString(), headers: request.headers);
       if (response.statusCode == 200) {
         Map json = jsonDecode(response.body);
         if (json.containsKey('errors')) {
@@ -30,11 +31,23 @@ class PostHttpRequest implements RequestDatasource {
           request: request,
         );
       } else {
-        if(response.statusCode == 500) {
+        if (response.statusCode == 500) {
           throw ConnectionError('Connection Rejected', request: request);
         }
 
-        throw HasuraRequestError(response.reasonPhrase!, null, request: request);
+        Map? json = jsonDecode(response.body);
+        if (json != null && json.containsKey('errors')) {
+          throw HasuraRequestError.fromJson(
+            json['errors']![0],
+            request: request,
+          );
+        }
+
+        throw HasuraRequestError(
+          response.reasonPhrase!,
+          null,
+          request: request,
+        );
       }
     } finally {
       client.close();
