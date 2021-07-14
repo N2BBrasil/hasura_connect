@@ -25,7 +25,8 @@ class Snapshot<T> extends Stream<T> implements EventSink<T> {
     _wrapper.value = defaultValue;
     _query = query;
     _controller = controller ?? StreamController.broadcast();
-    _rootStream = rootStream ?? _controller.stream.transform(StartWithStreamTransformer<T>(_wrapper));
+    _rootStream =
+        rootStream ?? _controller.stream.transform(StartWithStreamTransformer<T>(_wrapper));
   }
   Future changeVariables(Map<String, dynamic> variables) async {
     _query = _query.copyWith(variables: variables);
@@ -35,8 +36,12 @@ class Snapshot<T> extends Stream<T> implements EventSink<T> {
   }
 
   @override
-  StreamSubscription<T> listen(void Function(T event)? onData, {Function? onError, void Function()? onDone, bool? cancelOnError}) {
-    return _rootStream.listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  StreamSubscription<T> listen(void Function(T event)? onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
+    return _rootStream.listen((T event) {
+      _wrapper.value = event;
+      onData?.call(event);
+    }, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
   }
 
   @override
@@ -73,7 +78,8 @@ class Snapshot<T> extends Stream<T> implements EventSink<T> {
 class StartWithStreamTransformer<T> extends StreamTransformerBase<T, T> {
   final StreamTransformer<T, T> transformer;
 
-  StartWithStreamTransformer(_WrapperStartWith<T> wrapper) : transformer = _buildTransformer<T>(wrapper);
+  StartWithStreamTransformer(_WrapperStartWith<T> wrapper)
+      : transformer = _buildTransformer<T>(wrapper);
 
   @override
   Stream<T> bind(Stream<T> stream) => transformer.bind(stream);
@@ -90,7 +96,10 @@ class StartWithStreamTransformer<T> extends StreamTransformerBase<T, T> {
               controller.add(wrapper.value);
             }
 
-            subscription = input.listen(controller.add, onError: controller.addError, onDone: controller.close, cancelOnError: cancelOnError);
+            subscription = input.listen(controller.add,
+                onError: controller.addError,
+                onDone: controller.close,
+                cancelOnError: cancelOnError);
           },
           onPause: ([Future<dynamic>? resumeSignal]) => subscription.pause(resumeSignal),
           onResume: () => subscription.resume(),
