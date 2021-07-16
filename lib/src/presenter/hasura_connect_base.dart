@@ -13,13 +13,12 @@ import 'package:hasura_connect/src/domain/usecases/get_connector.dart';
 import 'package:hasura_connect/src/domain/usecases/get_snapshot_subscription.dart';
 import 'package:hasura_connect/src/domain/usecases/mutation_to_server.dart';
 import 'package:hasura_connect/src/domain/usecases/query_to_server.dart';
-
-import '../domain/entities/snapshot.dart';
-import 'package:meta/meta.dart';
 import 'package:http/http.dart' as http;
+import 'package:meta/meta.dart';
 
-import '../di/module.dart';
 import '../di/injection.dart' as sl;
+import '../di/module.dart';
+import '../domain/entities/snapshot.dart';
 
 class HasuraConnect {
   @visibleForTesting
@@ -44,15 +43,23 @@ class HasuraConnect {
   Connector? _connector;
 
   late StreamSubscription _subscription;
-  final int? reconnectionAttemp;
+  final int? reconnectionAttempt;
   final Map<String, String>? headers;
 
-  HasuraConnect(this.url, {this.reconnectionAttemp, List<Interceptor>? interceptors, this.headers, http.Client Function()? httpClientFactory}) {
+  HasuraConnect(this.url,
+      {this.reconnectionAttempt,
+      List<Interceptor>? interceptors,
+      this.headers,
+      http.Client Function()? httpClientFactory}) {
     startModule(httpClientFactory);
     _interceptorExecutor = InterceptorExecutor(interceptors);
 
-    _subscription =
-        controller.stream.where((data) => data is Map).map((data) => data as Map).where((data) => data.containsKey('id')).where((data) => snapmap.containsKey(data['id'])).listen(rootStreamListener);
+    _subscription = controller.stream
+        .where((data) => data is Map)
+        .map((data) => data as Map)
+        .where((data) => data.containsKey('id'))
+        .where((data) => snapmap.containsKey(data['id']))
+        .listen(rootStreamListener);
   }
 
   @visibleForTesting
@@ -141,7 +148,8 @@ class HasuraConnect {
     }
   }
 
-  Future mutation(String document, {Map<String, dynamic>? variables, bool tryAgain = true, String? key}) async {
+  Future mutation(String document,
+      {Map<String, dynamic>? variables, bool tryAgain = true, String? key}) async {
     final usecase = sl.get<MutationToServer>();
 
     key = key ?? _keyGenerator.randomString(15);
@@ -172,7 +180,8 @@ class HasuraConnect {
     return (await result.fold(_interceptError, _interceptResponse)).data;
   }
 
-  Future<Snapshot> subscription(String document, {String? key, Map<String, dynamic>? variables}) async {
+  Future<Snapshot> subscription(String document,
+      {String? key, Map<String, dynamic>? variables}) async {
     document = document.trim();
     key = key ?? _keyGenerator.generateBase(document);
     Snapshot snapshot;
@@ -246,8 +255,8 @@ class HasuraConnect {
     final connector = _connector!;
     _disconnectionFlag = false;
 
-    if (reconnectionAttemp != null && reconnectionAttemp! > 0) {
-      if (_numbersOfConnectionAttempts >= reconnectionAttemp!) {
+    if (reconnectionAttempt != null && reconnectionAttempt! > 0) {
+      if (_numbersOfConnectionAttempts >= reconnectionAttempt!) {
         print('maximum connection attempt numbers reached');
         _isConnected = false;
         // ignore: unawaited_futures
@@ -275,9 +284,15 @@ class HasuraConnect {
       } else if (interceptedValue is HasuraError) {
         throw interceptedValue;
       }
-      final subscriptionStream = connector.map<Map>((event) => jsonDecode(event)).listen(normalizeStreamValue);
+      final subscriptionStream =
+          connector.map<Map>((event) => jsonDecode(event)).listen(normalizeStreamValue);
       (_init['payload'] as Map)['headers'] = request.headers;
       sendToWebSocketServer(jsonEncode(_init));
+      subscriptionStream.onDone(() {
+        _connector = null;
+        _isConnected = false;
+        _connect();
+      });
       subscriptionStream.onError(print);
       await connector.done;
       await subscriptionStream.cancel();
