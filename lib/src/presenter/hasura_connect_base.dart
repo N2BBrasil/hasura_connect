@@ -27,7 +27,7 @@ class HasuraConnect {
   final String url;
   @visibleForTesting
   final Map<String, Snapshot> snapmap = {};
-  final KeyGenerator _keyGenerator = KeyGenerator();
+  final KeyGenerator keyGenerator = KeyGenerator();
   late InterceptorExecutor _interceptorExecutor;
   bool _isConnected = false;
   bool _disconnectionFlag = false;
@@ -47,12 +47,22 @@ class HasuraConnect {
   final int? reconnectionAttemp;
   final Map<String, String>? headers;
 
-  HasuraConnect(this.url, {this.reconnectionAttemp, List<Interceptor>? interceptors, this.headers, http.Client Function()? httpClientFactory}) {
+  HasuraConnect(
+    this.url, {
+    this.reconnectionAttemp,
+    List<Interceptor>? interceptors,
+    this.headers,
+    http.Client Function()? httpClientFactory,
+  }) {
     startModule(httpClientFactory);
     _interceptorExecutor = InterceptorExecutor(interceptors);
 
-    _subscription =
-        controller.stream.where((data) => data is Map).map((data) => data as Map).where((data) => data.containsKey('id')).where((data) => snapmap.containsKey(data['id'])).listen(rootStreamListener);
+    _subscription = controller.stream
+        .where((data) => data is Map)
+        .map((data) => data as Map)
+        .where((data) => data.containsKey('id'))
+        .where((data) => snapmap.containsKey(data['id']))
+        .listen(rootStreamListener);
   }
 
   @visibleForTesting
@@ -88,9 +98,10 @@ class HasuraConnect {
     }
   }
 
-  Future query(String document, {String? key, Map<String, dynamic>? variables}) async {
+  Future query(String document,
+      {String? key, Map<String, dynamic>? variables}) async {
     final usecase = sl.get<QueryToServer>();
-    key = key ?? _keyGenerator.generateBase(document);
+    key = key ?? keyGenerator.generateBase(document);
     var request = Request(
       headers: headers,
       type: RequestType.query,
@@ -141,10 +152,13 @@ class HasuraConnect {
     }
   }
 
-  Future mutation(String document, {Map<String, dynamic>? variables, bool tryAgain = true, String? key}) async {
+  Future mutation(String document,
+      {Map<String, dynamic>? variables,
+      bool tryAgain = true,
+      String? key}) async {
     final usecase = sl.get<MutationToServer>();
 
-    key = key ?? _keyGenerator.randomString(15);
+    key = key ?? keyGenerator.randomString(15);
     var request = Request(
       headers: headers,
       type: RequestType.mutation,
@@ -172,9 +186,13 @@ class HasuraConnect {
     return (await result.fold(_interceptError, _interceptResponse)).data;
   }
 
-  Future<Snapshot> subscription(String document, {String? key, Map<String, dynamic>? variables}) async {
+  Future<Snapshot> subscription(
+    String document, {
+    String? key,
+    Map<String, dynamic>? variables,
+  }) async {
     document = document.trim();
-    key = key ?? _keyGenerator.generateBase(document);
+    key = key ?? keyGenerator.generateBase(document);
     Snapshot snapshot;
     if (snapmap.containsKey(key)) {
       snapshot = snapmap[key]!;
@@ -275,7 +293,9 @@ class HasuraConnect {
       } else if (interceptedValue is HasuraError) {
         throw interceptedValue;
       }
-      final subscriptionStream = connector.map<Map>((event) => jsonDecode(event)).listen(normalizeStreamValue);
+      final subscriptionStream = connector
+          .map<Map>((event) => jsonDecode(event))
+          .listen(normalizeStreamValue);
       (_init['payload'] as Map)['headers'] = request.headers;
       sendToWebSocketServer(jsonEncode(_init));
       subscriptionStream.onError(print);
