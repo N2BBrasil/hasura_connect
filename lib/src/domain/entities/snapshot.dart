@@ -25,8 +25,10 @@ class Snapshot<T> extends Stream<T> implements EventSink<T> {
     _wrapper.value = defaultValue;
     _query = query;
     _controller = controller ?? StreamController.broadcast();
-    _rootStream =
-        rootStream ?? _controller.stream.transform(StartWithStreamTransformer<T>(_wrapper));
+    _rootStream = rootStream ??
+        _controller.stream.transform(
+          StartWithStreamTransformer<T>(_wrapper),
+        );
   }
   Future changeVariables(Map<String, dynamic> variables) async {
     _query = _query.copyWith(variables: variables);
@@ -58,7 +60,7 @@ class Snapshot<T> extends Stream<T> implements EventSink<T> {
   @override
   void add(T event) {
     _wrapper.value = event;
-    _controller.add(event);
+    if (!_controller.isClosed) _controller.add(event);
   }
 
   @override
@@ -68,9 +70,11 @@ class Snapshot<T> extends Stream<T> implements EventSink<T> {
 
   @mustCallSuper
   @override
-  void close() {
-    _controller.stream.drain();
-    _controller.close();
+  Future<void> close() async {
+    await Future.wait([
+      _controller.stream.drain(),
+      _controller.close(),
+    ]);
     closeConnection?.call(this);
   }
 }
@@ -84,7 +88,9 @@ class StartWithStreamTransformer<T> extends StreamTransformerBase<T, T> {
   @override
   Stream<T> bind(Stream<T> stream) => transformer.bind(stream);
 
-  static StreamTransformer<T, T> _buildTransformer<T>(_WrapperStartWith wrapper) {
+  static StreamTransformer<T, T> _buildTransformer<T>(
+    _WrapperStartWith wrapper,
+  ) {
     return StreamTransformer<T, T>((Stream<T> input, bool cancelOnError) {
       late StreamController<T> controller;
       late StreamSubscription<T> subscription;
@@ -101,7 +107,9 @@ class StartWithStreamTransformer<T> extends StreamTransformerBase<T, T> {
                 onDone: controller.close,
                 cancelOnError: cancelOnError);
           },
-          onPause: ([Future<dynamic>? resumeSignal]) => subscription.pause(resumeSignal),
+          onPause: ([Future<dynamic>? resumeSignal]) {
+            subscription.pause(resumeSignal);
+          },
           onResume: () => subscription.resume(),
           onCancel: () => subscription.cancel());
 

@@ -34,8 +34,11 @@ void main() {
   when(websocket).calls(#done).thenAnswer((_) async => 0);
 
   setUp(() {
-    connect = HasuraConnect('https://fake-hasura.com', interceptors: [LogInterceptor()]);
-    when(client).calls(#post).thenAnswer((_) async => http.Response(stringJsonReponse, 200));
+    connect = HasuraConnect('https://fake-hasura.com',
+        interceptors: [LogInterceptor()]);
+    when(client)
+        .calls(#post)
+        .thenAnswer((_) async => http.Response(stringJsonReponse, 200));
     when(wrapper).calls(#connect).thenAnswer((_) async => websocket);
     cleanModule();
     startModule(() => client, wrapper);
@@ -71,8 +74,8 @@ void main() {
       expect(snapshot, isA<Snapshot>());
       final snapshot2 = await connect.subscription('subscription');
       expect(snapshot2 == snapshot, true);
-      snapshot.close();
-      snapshot2.close();
+      await snapshot.close();
+      await snapshot2.close();
     });
 
     test('should execute with error', () {
@@ -84,8 +87,9 @@ void main() {
       final snapshot = Snapshot(query: Query(document: 'null'));
       expect(snapshot, emits('test'));
       connect.snapmap['fdfhsf'] = snapshot;
-      connect.rootStreamListener({'id': 'fdfhsf', 'payload': 'test', 'type': 'data'});
-      snapshot.close();
+      connect.rootStreamListener(
+          {'id': 'fdfhsf', 'payload': 'test', 'type': 'data'});
+      await snapshot.close();
     });
     test('should execute with HasuraRequestError 1', () async {
       final snapshot = Snapshot(query: Query(document: 'null'));
@@ -96,7 +100,7 @@ void main() {
         'payload': {'error': 'test'},
         'type': 'error'
       });
-      snapshot.close();
+      await snapshot.close();
     });
 
     test('should execute with HasuraRequestError 2', () async {
@@ -112,7 +116,7 @@ void main() {
         },
         'type': 'error'
       });
-      snapshot.close();
+      await snapshot.close();
     });
   });
 
@@ -123,17 +127,25 @@ void main() {
       final data = {'id': 'fdfhsf', 'payload': 'test', 'type': 'data'};
       expect(connect.controller.stream, emits(data));
       await connect.normalizeStreamValue(data);
-      snapshot.close();
+      await snapshot.close();
     });
     test('should execute connection_ack', () async {
       final snapshot = Snapshot(query: Query(document: 'null'));
       connect.snapmap['fdfhsf'] = snapshot;
-      final data = {'id': 'fdfhsf', 'payload': 'test', 'type': 'connection_ack'};
+      final data = {
+        'id': 'fdfhsf',
+        'payload': 'test',
+        'type': 'connection_ack'
+      };
       await connect.normalizeStreamValue(data);
-      snapshot.close();
+      await snapshot.close();
     });
     test('should execute connection_error', () async {
-      final data = {'id': 'fdfhsf', 'payload': 'test', 'type': 'connection_error'};
+      final data = {
+        'id': 'fdfhsf',
+        'payload': 'test',
+        'type': 'connection_error'
+      };
       await connect.normalizeStreamValue(data);
     });
   });

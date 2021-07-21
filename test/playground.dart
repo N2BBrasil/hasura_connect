@@ -23,6 +23,6 @@ Future main() async {
   subscription.onError(print);
 
   await Future.delayed(Duration(seconds: 10));
-  snapshot.close();
+  await snapshot.close();
   await Future.delayed(Duration(seconds: 10));
 }

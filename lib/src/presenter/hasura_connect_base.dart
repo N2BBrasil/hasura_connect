@@ -1,3 +1,5 @@
+// ignore_for_file: unawaited_futures
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -46,11 +48,13 @@ class HasuraConnect {
   final int? reconnectionAttempt;
   final Map<String, String>? headers;
 
-  HasuraConnect(this.url,
-      {this.reconnectionAttempt,
-      List<Interceptor>? interceptors,
-      this.headers,
-      http.Client Function()? httpClientFactory}) {
+  HasuraConnect(
+    this.url, {
+    this.reconnectionAttempt,
+    List<Interceptor>? interceptors,
+    this.headers,
+    http.Client Function()? httpClientFactory,
+  }) {
     startModule(httpClientFactory);
     _interceptorExecutor = InterceptorExecutor(interceptors);
 
@@ -95,7 +99,11 @@ class HasuraConnect {
     }
   }
 
-  Future query(String document, {String? key, Map<String, dynamic>? variables}) async {
+  Future query(
+    String document, {
+    String? key,
+    Map<String, dynamic>? variables,
+  }) async {
     final usecase = sl.get<QueryToServer>();
     key = key ?? _keyGenerator.generateBase(document);
     var request = Request(
@@ -148,8 +156,12 @@ class HasuraConnect {
     }
   }
 
-  Future mutation(String document,
-      {Map<String, dynamic>? variables, bool tryAgain = true, String? key}) async {
+  Future mutation(
+    String document, {
+    Map<String, dynamic>? variables,
+    bool tryAgain = true,
+    String? key,
+  }) async {
     final usecase = sl.get<MutationToServer>();
 
     key = key ?? _keyGenerator.randomString(15);
@@ -180,8 +192,12 @@ class HasuraConnect {
     return (await result.fold(_interceptError, _interceptResponse)).data;
   }
 
-  Future<Snapshot> subscription(String document,
-      {String? key, Map<String, dynamic>? variables}) async {
+  Future<Snapshot> subscription(
+    String document, {
+    String? key,
+    Map<String, dynamic>? variables,
+  }) async {
+    print('Subscription init');
     document = document.trim();
     key = key ?? _keyGenerator.generateBase(document);
     Snapshot snapshot;
@@ -209,7 +225,6 @@ class HasuraConnect {
     }
 
     if (snapmap.keys.isNotEmpty && !_isConnected) {
-      // ignore: unawaited_futures
       _connect();
     } else if (_isConnected) {
       final input = querySubscription(snapshot.query);
@@ -259,7 +274,6 @@ class HasuraConnect {
       if (_numbersOfConnectionAttempts >= reconnectionAttempt!) {
         print('maximum connection attempt numbers reached');
         _isConnected = false;
-        // ignore: unawaited_futures
         disconnect();
         _numbersOfConnectionAttempts = 0;
         return;
@@ -284,16 +298,22 @@ class HasuraConnect {
       } else if (interceptedValue is HasuraError) {
         throw interceptedValue;
       }
-      final subscriptionStream =
-          connector.map<Map>((event) => jsonDecode(event)).listen(normalizeStreamValue);
+      final subscriptionStream = connector
+          .map<Map>((event) => jsonDecode(event))
+          .listen(normalizeStreamValue);
+
       (_init['payload'] as Map)['headers'] = request.headers;
       sendToWebSocketServer(jsonEncode(_init));
-      subscriptionStream.onDone(() {
-        _connector = null;
-        _isConnected = false;
-        _connect();
+
+      subscriptionStream.onError((error) {
+        print('SUBSCRIPTION ON ERROR:');
+        print(error);
       });
-      subscriptionStream.onError(print);
+      subscriptionStream.onDone(() async {
+        print('SUBSCRIPTION ON DONE');
+        await _renewSubscriptions();
+      });
+
       await connector.done;
       await subscriptionStream.cancel();
       _isConnected = false;
@@ -302,14 +322,26 @@ class HasuraConnect {
         return;
       }
       await Future.delayed(Duration(milliseconds: 3000));
-      // ignore: unawaited_futures
       _connect();
     } catch (e) {
       if (_disconnectionFlag) {
         return;
       }
-      // ignore: unawaited_futures
+      print('SUBSCRIPTION CATCH ERROR: $e');
       _connect();
+    }
+  }
+
+  Future<void> _renewSubscriptions() async {
+    if (snapmap.isEmpty) {
+      print('Snapshot map is empty');
+      disconnect();
+    } else {
+      final snapmapSnapshot = Map<String, Snapshot>.from(snapmap);
+      disconnect().then((_) {
+        snapmap.addAll(snapmapSnapshot);
+        _connect();
+      });
     }
   }
 
@@ -330,11 +362,15 @@ class HasuraConnect {
     if (data['type'] == 'data' || data['type'] == 'error') {
       controller.add(data);
     } else if (data['type'] == 'connection_ack') {
-      await _interceptorExecutor.onConnected(this);
-      _numbersOfConnectionAttempts = 0;
-      _isConnected = true;
-      for (var snap in snapmap.values) {
-        sendToWebSocketServer(querySubscription(snap.query));
+      try {
+        await _interceptorExecutor.onConnected(this);
+        _numbersOfConnectionAttempts = 0;
+        _isConnected = true;
+        for (var snap in snapmap.values) {
+          sendToWebSocketServer(querySubscription(snap.query));
+        }
+      } on Exception catch (e) {
+        print('STREAM CONNECT ERROR: $e');
       }
     } else if (data['type'] == 'connection_error') {
       await Future.delayed(Duration(seconds: 2));
@@ -349,8 +385,10 @@ class HasuraConnect {
     }
     _disconnectionFlag = true;
     final keys = List<String>.from(snapmap.keys);
-    for (var key in keys) {
-      snapmap[key]?.close();
+    try {
+      Future.wait([for (var key in keys) snapmap[key]!.close()]);
+    } on Exception catch (e) {
+      print('ERROR CLOSING SNAPSHOTS: $e');
     }
     snapmap.clear();
     var disconect = {'type': 'connection_terminate'};
@@ -367,7 +405,6 @@ class HasuraConnect {
 
   @mustCallSuper
   Future dispose() async {
-    // ignore: unawaited_futures
     await disconnect();
     await controller.close();
     await _subscription.cancel();
