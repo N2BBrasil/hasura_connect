@@ -226,6 +226,7 @@ class HasuraConnect {
 
     if (snapmap.keys.isNotEmpty && !_isConnected) {
       _connect();
+      await Future.delayed(const Duration(milliseconds: 500));
     } else if (_isConnected) {
       final input = querySubscription(snapshot.query);
       sendToWebSocketServer(input);
@@ -298,9 +299,7 @@ class HasuraConnect {
       } else if (interceptedValue is HasuraError) {
         throw interceptedValue;
       }
-      final subscriptionStream = connector
-          .map<Map>((event) => jsonDecode(event))
-          .listen(normalizeStreamValue);
+      final subscriptionStream = connector.map<Map>((event) => jsonDecode(event)).listen(normalizeStreamValue);
 
       (_init['payload'] as Map)['headers'] = request.headers;
       sendToWebSocketServer(jsonEncode(_init));
